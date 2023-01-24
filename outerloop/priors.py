@@ -5,7 +5,8 @@ import torch
 class BetaPrior(gpytorch.priors.Prior, torch.distributions.Beta):
     def __init__(self, concentration1, concentration0, validate_args=False,
                  transform=None):
-        super().__init__(concentration1, concentration0, validate_args)
+        super().__init__(concentration1, concentration0,
+                         validate_args=validate_args)
         self._transform = transform
 
     def expand(self, batch_shape):
