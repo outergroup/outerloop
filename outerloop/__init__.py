@@ -3,8 +3,11 @@ import itertools
 import torch
 
 from . import kernels
+from . import modules
 from . import priors
+from . import sequential
 from . import transforms
+from . import treelevels
 
 
 class Scalar:
