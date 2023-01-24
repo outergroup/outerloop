@@ -270,7 +270,6 @@ def multiply(name_to_new_name, operand_name):
     return partial(Multiply, name_to_new_name, operand_name)
 
 
-
 class Log(torch.nn.Module):
     def __init__(self, name_to_new_name, space):
         super().__init__()
@@ -370,9 +369,6 @@ class BotorchInputTransform(botorch.models.transforms.input.InputTransform,
     def transform(self, X):
         return self.wrapped_t.transform(X)
 
-    def extra_repr(self):
-        return f"transform={self.wrapped_t}"
-
 
 class ChoiceParameterLearnedProjection(torch.nn.Module):
     def __init__(self, space, names, out_name, scalar_offsets=[],
@@ -467,7 +463,6 @@ class ChoiceParameterLearnedProjection(torch.nn.Module):
 
         proj = proj.repeat(*batch_shape, *[1] * len(proj.shape)).view(
             *batch_shape, *proj.shape)
-        proj.requires_grad_()
 
         self.proj = torch.nn.Parameter(proj)
 
@@ -485,7 +480,11 @@ class ChoiceParameterLearnedProjection(torch.nn.Module):
         # Strip the final "inactive" bit.
         choice_X_hot = choice_X_hot[..., :self.D_choice]
 
-        d = torch.matmul(choice_X_hot, self.proj.transpose(-2, -1))
+        proj = self.proj
+        if not self.training:
+            proj = proj.detach()
+
+        d = torch.matmul(choice_X_hot, proj.transpose(-2, -1))
 
         other_X = X[..., self.other_indices]
         other_X[..., self.offset_scalar_indices] += d[..., :self.D_scalar]

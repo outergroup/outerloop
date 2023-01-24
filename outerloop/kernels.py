@@ -4,12 +4,6 @@ import gpytorch
 import torch
 
 
-class SuppressDebugChecksKernel(gpytorch.kernels.Kernel):
-    def __call__(self, *args, **kwargs):
-        with gpytorch.settings.debug(False):
-            return super().__call__(*args, **kwargs)
-
-
 class InnerOuterAlphaWeights(gpytorch.Module):
     """
     This provides a 2-weight parameterization of a set of 3 weights.
@@ -21,7 +15,7 @@ class InnerOuterAlphaWeights(gpytorch.Module):
     expression, i.e
         w1*w2
         w1*(1-w2)
-        (1-s1)
+        (1-w1)
     """
     def __init__(self, alpha_inner_prior, alpha_outer_prior,
                  batch_shape=torch.Size([])):
@@ -45,7 +39,13 @@ class InnerOuterAlphaWeights(gpytorch.Module):
 
     @property
     def alpha_outer(self):
-        return self.raw_alpha_outer_constraint.transform(self.raw_alpha_outer)
+        if self.training:
+            return self.raw_alpha_outer_constraint.transform(
+                self.raw_alpha_outer)
+        else:
+            with torch.no_grad():
+                return self.raw_alpha_outer_constraint.transform(
+                    self.raw_alpha_outer)
 
     @classmethod
     def alpha_outer_getter(cls, k):
@@ -62,7 +62,13 @@ class InnerOuterAlphaWeights(gpytorch.Module):
 
     @property
     def alpha_inner(self):
-        return self.raw_alpha_inner_constraint.transform(self.raw_alpha_inner)
+        if self.training:
+            return self.raw_alpha_inner_constraint.transform(
+                self.raw_alpha_inner)
+        else:
+            with torch.no_grad():
+                return self.raw_alpha_inner_constraint.transform(
+                    self.raw_alpha_inner)
 
     @classmethod
     def alpha_inner_getter(cls, k):
@@ -84,7 +90,7 @@ class InnerOuterAlphaWeights(gpytorch.Module):
                          dim=-1)
 
 
-class WeightedSPSMaternKernel(SuppressDebugChecksKernel):
+class WeightedSPSMaternKernel(gpytorch.kernels.Kernel):
     """
     Weighted sum of products of sums of 1D Matern kernels (with nu=2.5)
     """
@@ -142,7 +148,7 @@ class WeightedSPSMaternKernel(SuppressDebugChecksKernel):
 
         d = x2_.unsqueeze(-3) - x1_.unsqueeze(-2)
 
-        # Measuring a bunch of 1D distances. abs is suffiecient.
+        # Measuring a bunch of 1D distances. abs is sufficient.
         # d = d.square_()
         # d = d.clamp_min_(1e-30).sqrt_()
         d = d.abs_()
