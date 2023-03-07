@@ -1,5 +1,6 @@
 import gpytorch
 import torch
+import torch.profiler
 
 
 class Reweight(torch.nn.Module):
@@ -39,19 +40,20 @@ class Reweight(torch.nn.Module):
         return w
 
     def forward(self, x):
-        if self.training:
-            w = self.compute_weights()
-        else:
-            w = self.cached_w
-            if w is None:
-                with torch.no_grad():
-                    w = self.compute_weights()
-                self.cached_w = w
+        with torch.profiler.record_function("Reweight.forward"):
+            if self.training:
+                w = self.compute_weights()
+            else:
+                w = self.cached_w
+                if w is None:
+                    with torch.no_grad():
+                        w = self.compute_weights()
+                    self.cached_w = w
 
-        if isinstance(x, tuple):
-            return tuple(x_ * w for x_ in x)
-        else:
-            return x * w
+            if isinstance(x, tuple):
+                return tuple(x_ * w for x_ in x)
+            else:
+                return x * w
 
 
 class WBetaPairBase(gpytorch.Module):
@@ -77,11 +79,12 @@ class WBetaPairBase(gpytorch.Module):
 
     @property
     def alpha(self):
-        if self.training:
-            return self.raw_alpha_constraint.transform(self.raw_alpha)
-        else:
-            with torch.no_grad():
+        with torch.profiler.record_function("WBetaPairBase.alpha"):
+            if self.training:
                 return self.raw_alpha_constraint.transform(self.raw_alpha)
+            else:
+                with torch.no_grad():
+                    return self.raw_alpha_constraint.transform(self.raw_alpha)
 
     @staticmethod
     def get_alpha(instance):
@@ -100,10 +103,11 @@ class WBetaPairBase(gpytorch.Module):
 
 class WBetaPair(WBetaPairBase):
     def __call__(self):
-        alpha = self.alpha
-        # Build [alpha1, 1-alpha1, alpha2, 1-alpha2, ...]
-        w = torch.stack((alpha, 1 - alpha), dim=-1).view(*alpha.shape[:-1], -1)
-        return w
+        with torch.profiler.record_function("WBetaPair.__call__"):
+            alpha = self.alpha
+            # Build [alpha1, 1-alpha1, alpha2, 1-alpha2, ...]
+            w = torch.stack((alpha, 1 - alpha), dim=-1).view(*alpha.shape[:-1], -1)
+            return w
 
 
 class WBetaPairCompose(WBetaPairBase):
@@ -148,14 +152,15 @@ class WBetaPairCompose(WBetaPairBase):
         return super()._apply(fn)
 
     def forward(self, w):
-        alpha = self.alpha
+        with torch.profiler.record_function("WBetaPairCompose.forward"):
+            alpha = self.alpha
 
-        w2 = torch.zeros(
-            (*w.shape[:-1], self.total_size), device=alpha.device
-        )
-        w2[..., self.indices1] = w * alpha.repeat_interleave(self.initial_lengths)
-        w2[..., self.indices2] = 1 - alpha
-        return w2
+            w2 = torch.zeros(
+                (*w.shape[:-1], self.total_size), device=alpha.device
+            )
+            w2[..., self.indices1] = w * alpha.repeat_interleave(self.initial_lengths, dim=-1)
+            w2[..., self.indices2] = 1 - alpha
+            return w2
 
 
 class WSingleBetaPairCompose(WBetaPairBase):
@@ -164,9 +169,10 @@ class WSingleBetaPairCompose(WBetaPairBase):
         assert len(lengths) == 1
 
     def forward(self, w):
-        alpha = self.alpha
-        w = alpha * w
-        return torch.cat([w, 1 - alpha], dim=-1)
+        with torch.profiler.record_function("WSingleBetaPairCompose.forward"):
+            alpha = self.alpha
+            w = alpha * w
+            return torch.cat([w, 1 - alpha], dim=-1)
 
 
 class SoftmaxAtConstraint(torch.nn.Module):
@@ -235,12 +241,13 @@ class WDirichlet(gpytorch.Module):
 
     @property
     def weight(self):
-        if self.training:
-            return self.weight_logits_constraint.transform(self.weight_logits)
-        else:
-            with torch.no_grad():
-                return self.weight_logits_constraint.transform(
-                    self.weight_logits)
+        with torch.profiler.record_function("WDirichlet.weight"):
+            if self.training:
+                return self.weight_logits_constraint.transform(self.weight_logits)
+            else:
+                with torch.no_grad():
+                    return self.weight_logits_constraint.transform(
+                        self.weight_logits)
 
     @staticmethod
     def get_weight(instance):
@@ -281,12 +288,13 @@ class WLengthscale(gpytorch.Module):
 
     @property
     def lengthscale(self):
-        if self.training:
-            return self.raw_lengthscale_constraint.transform(self.raw_lengthscale)
-        else:
-            with torch.no_grad():
-                return self.raw_lengthscale_constraint.transform(
-                    self.raw_lengthscale)
+        with torch.profiler.record_function("WLengthscale.lengthscale"):
+            if self.training:
+                return self.raw_lengthscale_constraint.transform(self.raw_lengthscale)
+            else:
+                with torch.no_grad():
+                    return self.raw_lengthscale_constraint.transform(
+                        self.raw_lengthscale)
 
     @staticmethod
     def get_lengthscale(instance):
@@ -303,7 +311,8 @@ class WLengthscale(gpytorch.Module):
         )
 
     def __call__(self):
-        return 1 / self.lengthscale
+        with torch.profiler.record_function("WLengthscale.__call__"):
+            return 1 / self.lengthscale
 
     def forward(self, x):
         lengthscale = self.lengthscale
@@ -336,11 +345,12 @@ class WScaleComposeBase(gpytorch.Module):
 
     @property
     def scale(self):
-        if self.training:
-            return self.raw_scale_constraint.transform(self.raw_scale)
-        else:
-            with torch.no_grad():
+        with torch.profiler.record_function("WScaleComposeBase.scale"):
+            if self.training:
                 return self.raw_scale_constraint.transform(self.raw_scale)
+            else:
+                with torch.no_grad():
+                    return self.raw_scale_constraint.transform(self.raw_scale)
 
     @staticmethod
     def get_scale(instance):
@@ -369,14 +379,16 @@ class WScaleCompose(WScaleComposeBase):
         return super()._apply(fn)
 
     def forward(self, w):
-        scale = self.scale[..., self.scalar_indices]
-        return scale * w
+        with torch.profiler.record_function("WScaleCompose.forward"):
+            scale = self.scale[..., self.scalar_indices]
+            return scale * w
 
 
 class WSingleScaleCompose(WScaleComposeBase):
     def forward(self, w):
-        scale = self.scale
-        return scale * w
+        with torch.profiler.record_function("WSingleScaleCompose.forward"):
+            scale = self.scale
+            return scale * w
 
 
 class WIdentityCompose(torch.nn.Module):
@@ -390,12 +402,13 @@ class WIdentityCompose(torch.nn.Module):
         return super()._apply(fn)
 
     def forward(self, w):
-        w2 = torch.ones(
-            (*w.shape[:-1], self.total_size),
-            device=w.device
-        )
-        w2[..., self.indices] = w
-        return w2
+        with torch.profiler.record_function("WIdentityCompose.forward"):
+            w2 = torch.ones(
+                (*w.shape[:-1], self.total_size),
+                device=w.device
+            )
+            w2[..., self.indices] = w
+            return w2
 
 
 

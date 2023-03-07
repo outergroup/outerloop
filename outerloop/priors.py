@@ -1,5 +1,6 @@
 import gpytorch
 import torch
+import torch.profiler
 
 
 class BetaPrior(gpytorch.priors.Prior, torch.distributions.Beta):
@@ -16,6 +17,10 @@ class BetaPrior(gpytorch.priors.Prior, torch.distributions.Beta):
 
     def _apply(self, fn):
         self._dirichlet.concentration = fn(self._dirichlet.concentration)
+
+    def log_prob(self, x):
+        with torch.profiler.record_function("BetaPrior.log_prob"):
+            return super().log_prob(x)
 
 
 class DirichletPrior(gpytorch.priors.Prior, torch.distributions.Dirichlet):
@@ -43,7 +48,8 @@ class DirichletAtPrior(gpytorch.priors.Prior):
         )
 
     def log_prob(self, x):
-        return torch.stack(
-            [prior.log_prob(x_)
-             for x_, prior in zip(x.split(self.lengths, -1), self.priors)]
-        ).sum()
+        with torch.profiler.record_function("DirichletAtPrior.log_prob"):
+            return torch.stack(
+                [prior.log_prob(x_)
+                for x_, prior in zip(x.split(self.lengths, -1), self.priors)]
+            ).sum()

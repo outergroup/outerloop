@@ -1,4 +1,5 @@
 import torch
+import torch.profiler
 
 
 class ZeroCenter(torch.nn.Module):
@@ -7,18 +8,19 @@ class ZeroCenter(torch.nn.Module):
     """
 
     def forward(self, x):
-        if isinstance(x, tuple):
-            # Use mean of x1
-            xm = x[0]
-        else:
-            xm = x
+        with torch.profiler.record_function("ZeroCenter.forward"):
+            if isinstance(x, tuple):
+                # Use mean of x1
+                xm = x[0]
+            else:
+                xm = x
 
-        mean = xm.reshape(-1, xm.size(-1)).mean(0)[(None,) * (xm.dim() - 1)]
+            mean = xm.reshape(-1, xm.size(-1)).mean(0)[(None,) * (xm.dim() - 1)]
 
-        if isinstance(x, tuple):
-            return tuple(x_ - mean for x_ in x)
-        else:
-            return x - mean
+            if isinstance(x, tuple):
+                return tuple(x_ - mean for x_ in x)
+            else:
+                return x - mean
 
 
 __all__ = [

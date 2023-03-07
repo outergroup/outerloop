@@ -1,4 +1,5 @@
 import torch
+import torch.profiler
 
 
 class Select(torch.nn.Module):
@@ -11,10 +12,11 @@ class Select(torch.nn.Module):
         return super()._apply(fn)
 
     def forward(self, x):
-        if isinstance(x, tuple):
-            return tuple(x_[..., self.indices] for x_ in x)
-        else:
-            return x[..., self.indices]
+        with torch.profiler.record_function("Select.forward"):
+            if isinstance(x, tuple):
+                return tuple(x_[..., self.indices] for x_ in x)
+            else:
+                return x[..., self.indices]
 
 
 __all__ = [
