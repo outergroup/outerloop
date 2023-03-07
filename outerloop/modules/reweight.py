@@ -267,6 +267,57 @@ class WDirichlet(gpytorch.Module):
                instance.weight_logits_constraint.inverse_transform(v)}
         )
 
+class WScale(gpytorch.Module):
+    def __init__(self,
+                 n,
+                 prior=None,
+                 constraint=None,
+                 batch_shape=torch.Size([])):
+        super().__init__()
+
+        name = "raw_scale"
+        self.register_parameter(
+            name=name,
+            parameter=torch.nn.Parameter(
+                torch.zeros(*batch_shape, n))
+        )
+
+        if constraint is None:
+            constraint = gpytorch.constraints.Positive()
+
+        self.register_constraint(name, constraint)
+
+        if prior is not None:
+            self.register_prior(f"scale_prior", prior,
+                                WScale.get_scale,
+                                WScale.set_scale)
+            
+    @property
+    def scale(self):
+        with torch.profiler.record_function("WScale.scale"):
+            if self.training:
+                return self.raw_scale_constraint.transform(self.raw_scale)
+            else:
+                with torch.no_grad():
+                    return self.raw_scale_constraint.transform(self.raw_scale)
+                
+    @staticmethod
+    def get_scale(instance):
+        return instance.scale
+    
+    @staticmethod
+    def set_scale(instance, v):
+        if not torch.is_tensor(v):
+            v = torch.as_tensor(v).to(instance.raw_scale)
+            
+        instance.initialize(
+            **{"raw_scale":
+               instance.raw_scale_constraint.inverse_transform(v)}
+        )
+
+    def __call__(self):
+        with torch.profiler.record_function("WScale.__call__"):
+            return self.scale
 
 
 class WLengthscale(gpytorch.Module):
@@ -419,6 +470,7 @@ __all__ = [
     "WBetaPairCompose",
     "WSingleBetaPairCompose",
     "WDirichlet",
+    "WScale",
     "WLengthscale",
     "WScaleCompose",
     "WSingleScaleCompose",

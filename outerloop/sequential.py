@@ -148,6 +148,33 @@ def w_dirichlet(dirichlet_prior_key=None,
     return w_dirichlet_constructor
 
 
+def w_scale(prior=None, constraint=None, # TODO keep?
+            gamma_prior_key=None,
+            batch_shape=torch.Size([])):
+    assert prior is None or gamma_prior_key is None
+    def scale_constructor(levels):
+        if prior is not None:
+            prior_ = prior
+        elif gamma_prior_key is not None:
+            prior_args = levels[-1].values[gamma_prior_key]
+            concentration, rate = (torch.tensor(x)
+                                   for x in zip(*prior_args))
+            prior_ = gpytorch.priors.GammaPrior(concentration, rate)
+        else:
+            prior_ = None
+
+        w_grouplengths = levels[-1].grouplengths
+
+        return ol.modules.WScale(
+            sum(levels[-1].grouplengths),
+            prior=prior_,
+            constraint=constraint,
+            batch_shape=batch_shape,
+        ), levels, w_grouplengths
+
+    return scale_constructor
+
+
 def w_lengthscale(prior=None, constraint=None, # TODO keep?
                   gamma_prior_key=None,
                   batch_shape=torch.Size([])):
