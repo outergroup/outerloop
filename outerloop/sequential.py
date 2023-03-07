@@ -80,7 +80,9 @@ def reweight(construct_weights, *transform_weights, ndims_per_model=None):
     return reweight_constructor
 
 
-def w_beta_pair(beta_prior_key=None, batch_shape=torch.Size([])):
+def w_beta_pair(prior=None, beta_prior_key=None, constraint=None,
+                batch_shape=torch.Size([])):
+    assert prior is None or beta_prior_key is None
     def w_beta_pair_constructor(levels):
         group_indices = [i
                          for i, length in enumerate(levels[-1].grouplengths)
@@ -88,19 +90,22 @@ def w_beta_pair(beta_prior_key=None, batch_shape=torch.Size([])):
         num_pairs = len(group_indices)
         w_grouplengths = [2] * num_pairs
 
-        if beta_prior_key is not None:
+        if prior is not None:
+            prior_ = prior
+        elif beta_prior_key is not None:
             prior_args = levels[-2].values[beta_prior_key]
             prior_args = [prior_args[i]
                           for i in group_indices]
             concentration1, concentration0 = (torch.tensor(x)
                                               for x in zip(*prior_args))
-            prior = ol.priors.BetaPrior(concentration1, concentration0)
+            prior_ = ol.priors.BetaPrior(concentration1, concentration0)
         else:
-            prior = None
+            prior_ = None
 
         return ol.modules.WBetaPair(
             num_pairs=num_pairs,
-            prior=prior,
+            prior=prior_,
+            constraint=constraint,
             batch_shape=batch_shape), levels, w_grouplengths
 
     return w_beta_pair_constructor
@@ -141,41 +146,54 @@ def w_dirichlet(dirichlet_prior_key=None,
     return w_dirichlet_constructor
 
 
-def w_lengthscale(gamma_prior_key=None, batch_shape=torch.Size([])):
+def w_lengthscale(prior=None, constraint=None, # TODO keep?
+                  gamma_prior_key=None,
+                  batch_shape=torch.Size([])):
+    assert prior is None or gamma_prior_key is None
     def lengthscale_constructor(levels):
-        if gamma_prior_key is not None:
+        if prior is not None:
+            prior_ = prior
+        elif gamma_prior_key is not None:
             prior_args = levels[-1].values[gamma_prior_key]
             concentration, rate = (torch.tensor(x)
                                    for x in zip(*prior_args))
-            prior = gpytorch.priors.GammaPrior(concentration, rate)
+            prior_ = gpytorch.priors.GammaPrior(concentration, rate)
         else:
-            prior = None
+            prior_ = None
 
         w_grouplengths = levels[-1].grouplengths
 
         return ol.modules.WLengthscale(
             sum(levels[-1].grouplengths),
-            prior=prior,
+            prior=prior_,
+            constraint=constraint,
             batch_shape=batch_shape,
         ), levels, w_grouplengths
     return lengthscale_constructor
 
 
-def w_beta_pair_compose(beta_prior_key=None, batch_shape=torch.Size([])):
+def w_beta_pair_compose(prior=None, beta_prior_key=None, constraint=None,
+                        batch_shape=torch.Size([])):
+    assert prior is None or beta_prior_key is None
+
     def w_beta_pair_compose_constructor(levels, w_grouplengths):
-        if beta_prior_key is not None:
+        if prior is not None:
+            prior_ = prior
+        elif beta_prior_key is not None:
             prior_args = levels[-2].values[beta_prior_key]
             concentration1, concentration0 = (torch.tensor(x)
                                               for x in zip(*prior_args))
-            prior = ol.priors.BetaPrior(concentration1, concentration0)
+            prior_ = ol.priors.BetaPrior(concentration1, concentration0)
         else:
-            prior = None
+            prior_ = None
 
         if len(w_grouplengths) == 1:
-            instance = ol.modules.WSingleBetaPairCompose(w_grouplengths, prior,
+            instance = ol.modules.WSingleBetaPairCompose(w_grouplengths, prior_,
+                                                         constraint,
                                                          batch_shape)
         else:
-            instance = ol.modules.WBetaPairCompose(w_grouplengths, prior,
+            instance = ol.modules.WBetaPairCompose(w_grouplengths, prior_,
+                                                   constraint,
                                                    batch_shape)
 
         return (instance,
@@ -185,21 +203,25 @@ def w_beta_pair_compose(beta_prior_key=None, batch_shape=torch.Size([])):
     return w_beta_pair_compose_constructor
 
 
-def w_scale_compose(gamma_prior_key=None, batch_shape=torch.Size([])):
+def w_scale_compose(prior=None, gamma_prior_key=None, batch_shape=torch.Size([])):
+    assert prior is None or gamma_prior_key is None
+
     def w_scale_compose_constructor(levels, w_grouplengths):
-        if gamma_prior_key is not None:
+        if prior is not None:
+            prior_ = prior
+        elif gamma_prior_key is not None:
             prior_args = levels[-2].values[gamma_prior_key]
             concentration, rate = (torch.tensor(x)
                                    for x in zip(*prior_args))
-            prior = gpytorch.priors.GammaPrior(concentration, rate)
+            prior_ = gpytorch.priors.GammaPrior(concentration, rate)
         else:
-            prior = None
+            prior_ = None
 
         if len(w_grouplengths) == 1:
             instance = ol.modules.WSingleScaleCompose(w_grouplengths,
-                                                      prior, batch_shape)
+                                                      prior_, batch_shape)
         else:
-            instance = ol.modules.WScaleCompose(w_grouplengths, prior,
+            instance = ol.modules.WScaleCompose(w_grouplengths, prior_,
                                                 batch_shape)
 
         return (instance,
@@ -224,10 +246,10 @@ def w_identity_compose():
     return w_identity_compose_constructor
 
 
-def select(space=None):
+def select(k, space=None):
     def select_constructor(levels):
         if space is not None:
-            keys = levels[-1].values["key"]
+            keys = levels[-1].values[k]
             indices = []
             for key in keys:
                 try:
@@ -238,7 +260,7 @@ def select(space=None):
                 except StopIteration:
                     raise ValueError(key)
         else:
-            indices = levels[-1].values["index"]
+            indices = levels[-1].values[k]
         return ol.modules.Select(indices), levels
     return select_constructor
 

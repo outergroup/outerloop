@@ -4,6 +4,10 @@ import torch.profiler
 
 
 class BetaPrior(gpytorch.priors.Prior, torch.distributions.Beta):
+    """
+    Note: https://github.com/pytorch/pytorch/issues/92260
+    i.e. don't ever let x be too close to 0 or 1. You may need to use constraints.
+    """
     def __init__(self, concentration1, concentration0, validate_args=False,
                  transform=None):
         super().__init__(concentration1, concentration0,

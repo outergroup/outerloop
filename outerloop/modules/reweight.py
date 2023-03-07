@@ -60,6 +60,7 @@ class WBetaPairBase(gpytorch.Module):
     def __init__(self,
                  num_pairs,
                  prior=None,
+                 constraint=None,
                  batch_shape=torch.Size([])):
         super().__init__()
 
@@ -70,7 +71,10 @@ class WBetaPairBase(gpytorch.Module):
                 torch.zeros(*batch_shape, num_pairs))
         )
 
-        self.register_constraint(name, gpytorch.constraints.Interval(0, 1))
+        if constraint is None:
+            constraint = gpytorch.constraints.Interval(0, 1)
+
+        self.register_constraint(name, constraint)
 
         if prior is not None:
             self.register_prior(f"alpha_prior", prior,
@@ -269,6 +273,7 @@ class WLengthscale(gpytorch.Module):
     def __init__(self,
                  n,
                  prior=None,
+                 constraint=None,
                  batch_shape=torch.Size([])):
         super().__init__()
 
@@ -279,7 +284,10 @@ class WLengthscale(gpytorch.Module):
                 torch.zeros(*batch_shape, n))
         )
 
-        self.register_constraint(name, gpytorch.constraints.Positive())
+        if constraint is None:
+            constraint = gpytorch.constraints.Positive()
+
+        self.register_constraint(name, constraint)
 
         if prior is not None:
             self.register_prior(f"lengthscale_prior", prior,
