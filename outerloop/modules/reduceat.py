@@ -1,5 +1,6 @@
 import abc
 
+import gpytorch.kernels.kernel
 import torch
 import torch.profiler
 
@@ -71,7 +72,51 @@ class ProdAt(ReduceAtBase):
             return x
 
 
+class CDistAt(torch.nn.Module):
+    def __init__(self, lengths):
+        super().__init__()
+        self.lengths = lengths
+        self.reduced_size = len(lengths)
+
+        self.max_length = max(lengths)
+        padded_matrix_rows = []
+        padded_matrix_cols = []
+        for i, length in enumerate(lengths):
+            padded_matrix_rows += [i] * length
+            padded_matrix_cols += range(length)
+        self.padded_matrix_rows = torch.tensor(padded_matrix_rows)
+        self.padded_matrix_cols = torch.tensor(padded_matrix_cols)
+
+    def _apply(self, fn):
+        self.padded_matrix_rows = fn(self.padded_matrix_rows)
+        self.padded_matrix_cols = fn(self.padded_matrix_cols)
+        return super()._apply(fn)
+
+    def forward(self, x):
+        with torch.profiler.record_function("CDistAt.forward"):
+            x1, x2 = x
+            x1_mat = torch.zeros((*x1.shape[:-1], self.reduced_size, self.max_length),
+                                 device=x1.device)
+            x1_mat[..., self.padded_matrix_rows, self.padded_matrix_cols] = x1
+            x1_mat = x1_mat.transpose(-3, -2)
+            x2_mat = torch.zeros((*x2.shape[:-1], self.reduced_size, self.max_length),
+                                 device=x2.device)
+            x2_mat[..., self.padded_matrix_rows, self.padded_matrix_cols] = x2
+            x2_mat = x2_mat.transpose(-3, -2)
+
+            # TODO: support setting something like
+            # with ol.x1_eq_x2():
+            #    ...
+            # so that the outside caller can specify this (they know already, we
+            # shouldn't infer it here)
+
+            result = gpytorch.kernels.kernel.dist(x1_mat, x2_mat, x1_eq_x2=False)
+            return result.permute(*range(result.dim() - 3), -2, -1, -3)
+
+
 __all__ = [
     "SumAt",
+    "MeanAt",
     "ProdAt",
+    "CDistAt",
 ]

@@ -32,6 +32,14 @@ def prod_at(all_positive=False):
     return prod_at_constructor
 
 
+def cdist_at():
+    def cdist_at_constructor(levels):
+        *levels, final = levels
+        return (ol.modules.CDistAt(final.grouplengths),
+                levels)
+    return cdist_at_constructor
+
+
 def reweight(construct_weights, *transform_weights, ndims_per_model=None):
     def reweight_constructor(levels):
         construct_instance, levels, w_grouplengths = construct_weights(levels)
