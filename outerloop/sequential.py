@@ -12,6 +12,7 @@ def passthrough(f):
     return passthrough_function
 
 
+clamp = passthrough(ol.modules.Clamp)
 cdist1d = passthrough(ol.modules.CDist1d)
 cdist1d_hamming = passthrough(ol.modules.CDist1dHamming)
 matern = passthrough(ol.modules.Matern)
