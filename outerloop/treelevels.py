@@ -9,7 +9,7 @@ TypedLevel = collections.namedtuple("TypedLevel", ["values", "grouplengths"])
 
 
 
-def typed(types, tree):
+def parse_typed(types, tree):
     """
     Convert a tree literal to a list of levels, building in an assumption
     that every node within a level has the same type.
@@ -23,6 +23,10 @@ def typed(types, tree):
     Each type can be:
     - a callable that takes a list of values for a level and returns an object
     - None, indicating that this level has no values, only children
+
+    The tree is only parsed down to the depth specified by `types`. If the tree
+    literal goes deeper than that, then the remainder of the tree is stored as
+    an unparsed treelevels literal as part of the value of the final level.
     """
     if types[-1] is None:
         raise ValueError("Leaf nodes must have type")
@@ -116,7 +120,7 @@ def dict_with_keys(keys):
     return construct_from_level_values
 
 
-def keyed(header_by_level, tree, use_tuples_as_keys=False):
+def parse(header_by_level, tree, use_tuples_as_keys=False):
     """
     A special case of treelevels.typed where every type is a dict with a
     known set of keys, with the tree literal containing only the values.
@@ -137,6 +141,7 @@ def keyed(header_by_level, tree, use_tuples_as_keys=False):
             types.append(None)
         elif (isinstance(header, list)
               or (isinstance(header, collections.abc.Sequence)
+                  and not isinstance(header, str)
                   and not use_tuples_as_keys)):
             if len(header) == 0:
                 types.append(None)
@@ -146,7 +151,7 @@ def keyed(header_by_level, tree, use_tuples_as_keys=False):
             # assume "header" is a single key
             types.append(dict_with_key(header))
 
-    return typed(types, tree)
+    return parse_typed(types, tree)
 
 
 __all__ = [

@@ -1,3 +1,5 @@
+import collections
+
 import gpytorch
 import torch
 
@@ -236,12 +238,46 @@ def select(space=None):
 zero_center = passthrough(ol.modules.ZeroCenter)
 
 
-def build_list(operations, levels):
+def switch(switch_key, value_key, cases):
+    def switch_constructor(levels):
+        nodes_by_key = collections.defaultdict(list)
+        indices_by_key = collections.defaultdict(list)
+        for i, (key, unparsed_tree) in enumerate(
+                zip(levels[-1].values[switch_key],
+                    levels[-1].values[value_key])):
+            nodes_by_key[key].append(unparsed_tree)
+            indices_by_key[key].append(i)
+
+        modules = []
+        result_index_groups = []
+        for key, nodes in nodes_by_key.items():
+            headers, operations = cases[key]
+            subtree_levels_before = ol.treelevels.parse(headers, nodes)
+            (instances,
+             subtree_levels_after) = _build_list(operations,
+                                                 subtree_levels_before)
+            modules.append(torch.nn.Sequential(*instances))
+            result_index_groups.append(indices_by_key[key])
+
+        result_length = sum(levels[-1].grouplengths)
+
+        return (ol.modules.CallAndMerge(modules, result_index_groups,
+                                        result_length),
+                levels)
+    return switch_constructor
+
+
+def _build_list(operations, levels):
     module_instances = []
     for constructor in operations:
         instance, levels = constructor(levels)
         module_instances.append(instance)
 
+    return module_instances, levels
+
+
+def build_list(operations, levels):
+    module_instances, levels = _build_list(operations, levels)
     return module_instances
 
 

@@ -1,4 +1,5 @@
 from .bounds import *
+from .call_and_merge import *
 from .distance import *
 from .matern import *
 from .reduceat import *
