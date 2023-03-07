@@ -113,15 +113,17 @@ def w_beta_pair(prior=None, beta_prior_key=None, constraint=None,
 
 def w_dirichlet(dirichlet_prior_key=None,
                 dirichlet_prior_concentration=None,
+                num_ignore=0,
                 batch_shape=torch.Size([])):
     assert dirichlet_prior_key is None or dirichlet_prior_concentration is None
 
     def w_dirichlet_constructor(levels):
-        w_grouplengths = [length
+        w_grouplengths = [length - num_ignore
                           for length in levels[-1].grouplengths
                           if length > 1]
 
         if dirichlet_prior_key is not None:
+            assert False
             concentration = torch.as_tensor(
                 levels[-1].values[dirichlet_prior_key]
             )
