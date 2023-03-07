@@ -13,7 +13,9 @@ def passthrough(f):
 
 
 cdist1d = passthrough(ol.modules.CDist1d)
+cdist1d_hamming = passthrough(ol.modules.CDist1dHamming)
 matern = passthrough(ol.modules.Matern)
+gibbs = passthrough(ol.modules.Gibbs)
 
 
 def sum_at():

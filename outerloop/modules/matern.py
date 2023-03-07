@@ -20,6 +20,13 @@ class Matern(torch.nn.Module):
             return constant_component * exp_component
 
 
+class Gibbs(torch.nn.Module):
+    def forward(self, d):
+        with torch.profiler.record_function("Gibbs.forward"):
+            return torch.exp(-d)
+
+
 __all__ = [
     "Matern",
+    "Gibbs",
 ]

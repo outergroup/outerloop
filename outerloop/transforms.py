@@ -111,7 +111,10 @@ class Chain(torch.nn.ModuleDict):
 
 class ToScalarSpace(Chain):
     def __init__(self, space, *transform_classes):
-        super().__init__(space, IntToScalar, *transform_classes)
+        if any(isinstance(p, ol.Int) for p in space):
+            transform_classes = (IntToScalar,) + transform_classes
+
+        super().__init__(space, *transform_classes)
 
 
 class Add(torch.nn.Module):
@@ -368,6 +371,58 @@ class BotorchInputTransform(botorch.models.transforms.input.InputTransform,
 
     def transform(self, X):
         return self.wrapped_t.transform(X)
+
+
+class ChoiceNHotProjection(torch.nn.Module):
+    def __init__(self, space, out_name):
+        super().__init__()
+        choice_indices = list(i for i, p in enumerate(space)
+                              if isinstance(p, ol.Choice))
+        other_indices = list(i for i, p in enumerate(space)
+                             if not isinstance(p, ol.Choice))
+        self.choice_indices = torch.tensor(choice_indices)
+        self.other_indices = torch.tensor(other_indices)
+
+        # Precompute offsets for converting between list of choice integers and
+        # indices in an n-hot vector.
+        offsets = []
+        tot = 0
+        for i in choice_indices:
+            offsets.append(tot)
+            tot += len(space[i].choices)
+        self.choice_offsets = torch.tensor(offsets).unsqueeze(0)
+        self.choice_tot = tot
+
+        self.space1 = space
+        self.space2 = ([space[i] for i in self.other_indices]
+                       # TODO I inserted a hack to append indices to the name
+                       + [ol.Scalar(out_name + str(i))
+                          for i in range(self.choice_tot)])
+
+    def _apply(self, fn):
+        self.choice_offsets = fn(self.choice_offsets)
+        self.choice_indices = fn(self.choice_indices)
+        self.other_indices = fn(self.other_indices)
+        return super()._apply(fn)
+
+    def transform(self, X):
+        choice_X = X[..., self.choice_indices]
+        other_X = X[..., self.other_indices]
+
+        # Convert choice ints to n-hot vector
+        on_indices = choice_X.long() + self.choice_offsets
+        # Temporarily use an extra bit at the end to capture inactive parameters.
+        on_indices = torch.where(choice_X == -1, self.choice_tot, on_indices)
+
+        choice_X_hot = torch.zeros(
+            (*choice_X.shape[:-1], self.choice_tot + 1),
+            dtype=bool, device=choice_X.device
+        ).scatter_(-1, on_indices, True)
+
+        # Strip the final "inactive" bit.
+        choice_X_hot = choice_X_hot[..., :self.choice_tot]
+
+        return torch.cat((other_X, choice_X_hot), dim=-1)
 
 
 class ChoiceParameterLearnedProjection(torch.nn.Module):
