@@ -138,7 +138,7 @@ class WBetaPairCompose(WBetaPairBase):
         indices2 = []
         base = 0
         for length in adjusted_lengths:
-            indices1 += list(range(base, length - 1))
+            indices1 += list(range(base, base + length - 1))
             indices2.append(base + length - 1)
             base += length
 
