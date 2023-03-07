@@ -29,6 +29,14 @@ def sum_at():
     return sum_at_constructor
 
 
+def mean_at():
+    def mean_at_constructor(levels):
+        *levels, final = levels
+        return (ol.modules.MeanAt(final.grouplengths),
+                levels)
+    return mean_at_constructor
+
+
 def prod_at(all_positive=False):
     def prod_at_constructor(levels):
         *levels, final = levels
