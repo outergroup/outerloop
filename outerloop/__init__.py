@@ -76,7 +76,6 @@ class Choice(Int):
         return self.choices.index(v)
 
 
-
 class LinearConstraint:
     """
     Encodes w * x <= bound, using an indices-and-coefficients description of w

@@ -314,13 +314,6 @@ class WLengthscale(gpytorch.Module):
         with torch.profiler.record_function("WLengthscale.__call__"):
             return 1 / self.lengthscale
 
-    def forward(self, x):
-        lengthscale = self.lengthscale
-        if isinstance(x, tuple):
-            return tuple(x_ / lengthscale for x_ in x)
-        else:
-            return x / lengthscale
-
 
 class WScaleComposeBase(gpytorch.Module):
     """
