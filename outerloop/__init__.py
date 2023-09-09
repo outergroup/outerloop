@@ -108,7 +108,9 @@ def botorch_bounds(parameters):
     return torch.tensor([p.bounds for p in parameters]).T
 
 
-def X_to_configs(parameters, X):
+def X_to_configs(parameters, X, xform=None):
+    if xform is not None:
+        X = xform(X)
     return [x_to_config(parameters, x)
             for x in X]
 
@@ -128,6 +130,25 @@ def x_to_config(parameters, x):
 
     return config
 
+
+def config_to_x(parameters, config):
+    x = []
+    for p in parameters:
+        active = p.condition is None or p.condition(config)
+        if active:
+            x.append(p.to_search_space(config[p.name]))
+        else:
+            x.append(p.inactive_value)
+    return x
+
+
+def configs_to_X(parameters, configs, xform=None, device=None):
+    X = [config_to_x(parameters, config)
+         for config in configs]
+    X = torch.tensor(X, device=device)
+    if xform is not None:
+        X = xform(X)
+    return X
 
 
 def all_choice_combinations(space):
@@ -195,5 +216,6 @@ __all__ = [
     "botorch_bounds",
     "X_to_configs",
     "x_to_config",
+    "config_to_x",
     "all_base_configurations",
 ]

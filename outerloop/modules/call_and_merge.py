@@ -7,7 +7,6 @@ import torch
 # use ModuleList.
 class CallAndMerge(torch.nn.ModuleDict):
     def __init__(self, modules, result_index_groups, result_length):
-        super().__init__()
         self.result_index_groups = [torch.as_tensor(group)
                                     for group in result_index_groups]
         self.result_length = result_length

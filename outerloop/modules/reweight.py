@@ -291,7 +291,7 @@ class WScale(gpytorch.Module):
             self.register_prior(f"scale_prior", prior,
                                 WScale.get_scale,
                                 WScale.set_scale)
-            
+
     @property
     def scale(self):
         with torch.profiler.record_function("WScale.scale"):
@@ -300,16 +300,16 @@ class WScale(gpytorch.Module):
             else:
                 with torch.no_grad():
                     return self.raw_scale_constraint.transform(self.raw_scale)
-                
+
     @staticmethod
     def get_scale(instance):
         return instance.scale
-    
+
     @staticmethod
     def set_scale(instance, v):
         if not torch.is_tensor(v):
             v = torch.as_tensor(v).to(instance.raw_scale)
-            
+
         instance.initialize(
             **{"raw_scale":
                instance.raw_scale_constraint.inverse_transform(v)}
@@ -325,7 +325,8 @@ class WLengthscale(gpytorch.Module):
                  n,
                  prior=None,
                  constraint=None,
-                 batch_shape=torch.Size([])):
+                 batch_shape=torch.Size([]),
+                 initialize=None):
         super().__init__()
 
         name = "raw_lengthscale"
@@ -344,6 +345,15 @@ class WLengthscale(gpytorch.Module):
             self.register_prior(f"lengthscale_prior", prior,
                                 WLengthscale.get_lengthscale,
                                 WLengthscale.set_lengthscale)
+            if initialize is not None:
+                if initialize == "mode":
+                    value = prior.mode
+                elif initialize == "mean":
+                    value = prior.mean
+                else:
+                    raise ValueError(f"Unrecognized initialization: {initialize}")
+
+                self.set_lengthscale(self, value)
 
     @property
     def lengthscale(self):
@@ -364,9 +374,15 @@ class WLengthscale(gpytorch.Module):
         if not torch.is_tensor(v):
             v = torch.as_tensor(v).to(instance.raw_lengthscale)
 
+        constraint = instance.raw_lengthscale_constraint
+        if not constraint.check(v):
+            print(f"Warning: {v} is not in {constraint}, clamping.")
+            v = v.clamp(constraint.lower_bound + 1e-6,
+                        constraint.upper_bound - 1e-6)
+
         instance.initialize(
             **{"raw_lengthscale":
-               instance.raw_lengthscale_constraint.inverse_transform(v)}
+               constraint.inverse_transform(v)}
         )
 
     def __call__(self):

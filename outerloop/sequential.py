@@ -14,6 +14,14 @@ def passthrough(f):
     return passthrough_function
 
 
+def passthrough2(f, w_grouplengths):
+    def passthrough2_function(*args, **kwargs):
+        def passthrough2_constructor(levels):
+            return f(*args, **kwargs), levels, w_grouplengths
+        return passthrough2_constructor
+    return passthrough2_function
+
+
 clamp = passthrough(ol.modules.Clamp)
 cdist1d = passthrough(ol.modules.CDist1d)
 cdist1d_hamming = passthrough(ol.modules.CDist1dHamming)
@@ -177,6 +185,7 @@ def w_scale(prior=None, constraint=None, # TODO keep?
 
 def w_lengthscale(prior=None, constraint=None, # TODO keep?
                   gamma_prior_key=None,
+                  initialize=False,
                   batch_shape=torch.Size([])):
     assert prior is None or gamma_prior_key is None
     def lengthscale_constructor(levels):
@@ -186,6 +195,11 @@ def w_lengthscale(prior=None, constraint=None, # TODO keep?
             prior_args = levels[-1].values[gamma_prior_key]
             concentration, rate = (torch.tensor(x)
                                    for x in zip(*prior_args))
+            # TODO this is a quick hack, decide whether to actually support this.
+            if rate.ndim == 2 or concentration.ndim == 2:
+                # reverse to support batches
+                concentration = concentration.t()
+                rate = rate.t()
             prior_ = gpytorch.priors.GammaPrior(concentration, rate)
         else:
             prior_ = None
@@ -196,6 +210,7 @@ def w_lengthscale(prior=None, constraint=None, # TODO keep?
             sum(levels[-1].grouplengths),
             prior=prior_,
             constraint=constraint,
+            initialize=initialize,
             batch_shape=batch_shape,
         ), levels, w_grouplengths
     return lengthscale_constructor
@@ -342,3 +357,26 @@ def build_list(operations, levels):
 
 def build(operations, levels):
     return torch.nn.Sequential(*build_list(operations, levels))
+
+
+def check(module, space, ignored_parameters=[]):
+    # iterate over all modules, submodules, sub-submodules, etc.
+    all_indices = set()
+
+    for m in module.modules():
+        if isinstance(m, ol.modules.Select):
+            all_indices.update(m.indices.tolist())
+
+    for i, p in enumerate(space):
+        expected = p.name not in ignored_parameters
+
+        if i in all_indices:
+            if not expected:
+                raise ValueError("Parameter {} is not expected to be used in "
+                                 "the model.".format(p.name))
+        else:
+            if expected:
+                raise ValueError("Parameter {} is expected to be used in the "
+                                 "model.".format(p.name))
+
+    return module
