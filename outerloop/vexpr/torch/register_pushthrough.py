@@ -5,11 +5,11 @@ import vexpr.torch.primitives as t_p
 from .primitives import matern_p, matern
 
 def push_stack_through_matern(shapes, expr, allow_partial=True):
-    assert expr.op is t_p.stack_p
+    assert expr.op == t_p.stack_p
 
     exprs_to_stack = expr.args[0]
     assert all(isinstance(child_expr, core.Vexpr)
-               and child_expr.op is matern_p
+               and child_expr.op == matern_p
                for child_expr in exprs_to_stack)
 
     nu = exprs_to_stack[0].kwargs.get("nu", 2.5)
@@ -39,11 +39,11 @@ def push_stack_through_matern(shapes, expr, allow_partial=True):
     return ret
 
 def push_concat_through_matern(shapes, expr, allow_partial=True):
-    assert expr.op is t_p.concat_p
+    assert expr.op == t_p.concat_p
 
     exprs_to_concat = expr.args[0]
     assert all(isinstance(child_expr, core.Vexpr)
-               and child_expr.op is matern_p
+               and child_expr.op == matern_p
                for child_expr in exprs_to_concat)
 
     nu = exprs_to_concat[0].kwargs.get("nu", 2.5)
