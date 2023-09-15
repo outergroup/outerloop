@@ -60,17 +60,17 @@ def push_concat_through_matern(shapes, expr, allow_partial=True):
                             for child_expr in exprs_to_concat]
     dim = expr.kwargs.get("dim", 0)
     if dim < 0:
-        dim += len(result_shape)
+        dim += len(grandchildren_shapes[0])
 
     # use dim to determine result shape after concat
     result_shape = []
     for i in range(len(grandchildren_shapes[0])):
         if i == dim:
             result_shape.append(sum(grandchildren_shape[i]
-                                   for grandchildren_shape in grandchildren_shapes))
+                                    for grandchildren_shape in grandchildren_shapes))
         else:
             assert all(grandchildren_shape[i] == grandchildren_shapes[0][i]
-                        for grandchildren_shape in grandchildren_shapes)
+                       for grandchildren_shape in grandchildren_shapes)
             result_shape.append(grandchildren_shapes[0][i])
 
     shapes[id(ret)] = tuple(result_shape)
