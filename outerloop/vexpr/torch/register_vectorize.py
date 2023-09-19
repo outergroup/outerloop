@@ -1,11 +1,12 @@
-import vexpr.core
+import vexpr.vectorization as v
+from vexpr import Vexpr
 
 from .primitives import matern_p
 
 def unary_elementwise_vectorize(shapes, expr):
-    return vexpr.core.Vexpr(
+    return Vexpr(
         expr.op,
-        (vexpr.core_vectorize(shapes, expr.args[0]),),
+        (v._vectorize(shapes, expr.args[0]),),
         **expr.kwargs)
 
-vexpr.core.vectorize_impls[matern_p] = unary_elementwise_vectorize
+v.vectorize_impls[matern_p] = unary_elementwise_vectorize
