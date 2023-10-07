@@ -79,9 +79,9 @@ class IntToScalar(torch.nn.Module):
     def untransform(self, X):
         with torch.profiler.record_function("IntToScalar.untransform"):
             X = X.clone()
-            return X.index_put_(
-                self.int_indices, X.index_select(-1, self.int_indices).floor_()
-            )
+            X[..., self.int_indices] = X.index_select(
+                -1, self.int_indices).floor_()
+            return X
 
     def _apply(self, fn):
         self.int_indices = fn(self.int_indices)
