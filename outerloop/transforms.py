@@ -19,12 +19,15 @@ class UntransformThenTransform(torch.nn.Module):
         self.space2 = space
 
     def transform(self, X):
-        # Preserve the gradients, don't track gradients for the roundtrip.
-        X_new = X.clone()
-        with torch.no_grad():
-            X_rounded = self.xform.transform(self.xform.untransform(X))
-            X_new = X_new.copy_(X_rounded)
-        return X_new
+        with torch.profiler.record_function(
+                "UntransformThenTransform.transform"
+        ):
+            # Preserve the gradients, don't track gradients for the roundtrip.
+            X_new = X.clone()
+            with torch.no_grad():
+                X_rounded = self.xform.transform(self.xform.untransform(X))
+                X_new = X_new.copy_(X_rounded)
+            return X_new
 
 
 class EnforceBounds:
@@ -36,15 +39,16 @@ class EnforceBounds:
         return X
 
     def untransform(self, X):
-        X = X.clone()
-        for i, p in enumerate(self.space2):
-            if isinstance(p, ol.Choice):
-                X[..., i].clamp_(min=min(p.bounds[0], p.inactive_value),
-                                 max=p.bounds[1])
-            else:
-                if p.bounds[0] is not None or p.bounds[1] is not None:
-                    X[..., i].clamp_(min=p.bounds[0], max=p.bounds[1])
-        return X
+        with torch.profiler.record_function("EnforceBounds.untransform"):
+            X = X.clone()
+            for i, p in enumerate(self.space2):
+                if isinstance(p, ol.Choice):
+                    X[..., i].clamp_(min=min(p.bounds[0], p.inactive_value),
+                                    max=p.bounds[1])
+                else:
+                    if p.bounds[0] is not None or p.bounds[1] is not None:
+                        X[..., i].clamp_(min=p.bounds[0], max=p.bounds[1])
+            return X
 
 
 class IntToScalar(torch.nn.Module):
@@ -60,7 +64,8 @@ class IntToScalar(torch.nn.Module):
         space2 = list(space)
         for i, p in enumerate(space):
             if isinstance(p, ol.Int):
-                space2[i] = ol.Scalar(p.name, p.bounds[0], p.bounds[1] + (1 - 1e-9),
+                space2[i] = ol.Scalar(p.name, p.bounds[0],
+                                      p.bounds[1] + (1 - 1e-9),
                                       p.condition)
         for i, p in enumerate(space):
             if isinstance(p, ol.Choice):
@@ -72,10 +77,11 @@ class IntToScalar(torch.nn.Module):
         return X
 
     def untransform(self, X):
-        X = X.clone()
-        return X.index_put_(
-            self.int_indices, X.index_select(-1, self.int_indices).floor_()
-        )
+        with torch.profiler.record_function("IntToScalar.untransform"):
+            X = X.clone()
+            return X.index_put_(
+                self.int_indices, X.index_select(-1, self.int_indices).floor_()
+            )
 
     def _apply(self, fn):
         self.int_indices = fn(self.int_indices)
@@ -151,14 +157,16 @@ class Add(torch.nn.Module):
         self.parameter_indices = torch.tensor(parameter_indices)
 
     def transform(self, X):
-        X = X.clone()
-        X[..., self.parameter_indices] += X.index_select(-1, self.operand_index)
-        return X
+        with torch.profiler.record_function("Add.transform"):
+            X = X.clone()
+            X[..., self.parameter_indices] += X.index_select(-1, self.operand_index)
+            return X
 
     def untransform(self, X):
-        X = X.clone()
-        X[..., self.parameter_indices] -= X.index_select(-1, self.operand_index)
-        return X
+        with torch.profiler.record_function("Add.untransform"):
+            X = X.clone()
+            X[..., self.parameter_indices] -= X.index_select(-1, self.operand_index)
+            return X
 
     def _apply(self, fn):
         self.operand_index = fn(self.operand_index)
@@ -203,14 +211,16 @@ class Subtract(torch.nn.Module):
         self.parameter_indices = torch.tensor(parameter_indices)
 
     def transform(self, X):
-        X = X.clone()
-        X[..., self.parameter_indices] -= X.index_select(-1, self.operand_index)
-        return X
+        with torch.profiler.record_function("Subtract.transform"):
+            X = X.clone()
+            X[..., self.parameter_indices] -= X.index_select(-1, self.operand_index)
+            return X
 
     def untransform(self, X):
-        X = X.clone()
-        X[..., self.parameter_indices] += X.index_select(-1, self.operand_index)
-        return X
+        with torch.profiler.record_function("Subtract.untransform"):
+            X = X.clone()
+            X[..., self.parameter_indices] += X.index_select(-1, self.operand_index)
+            return X
 
     def _apply(self, fn):
         self.operand_index = fn(self.operand_index)
@@ -255,17 +265,19 @@ class Multiply(torch.nn.Module):
         self.parameter_indices = torch.tensor(parameter_indices)
 
     def transform(self, X):
-        # An in-place update to X will interfere with backprop to the operands.
-        operands = X.index_select(-1, self.operand_index)
-        X = X.clone()
-        X[..., self.parameter_indices] *= operands
-        return X
+        with torch.profiler.record_function("Multiply.transform"):
+            # An in-place update to X will interfere with backprop to the operands.
+            operands = X.index_select(-1, self.operand_index)
+            X = X.clone()
+            X[..., self.parameter_indices] *= operands
+            return X
 
     def untransform(self, X):
-        operands = X.index_select(-1, self.operand_index)
-        X = X.clone()
-        X[..., self.parameter_indices] /= operands
-        return X
+        with torch.profiler.record_function("Multiply.untransform"):
+            operands = X.index_select(-1, self.operand_index)
+            X = X.clone()
+            X[..., self.parameter_indices] /= operands
+            return X
 
     def _apply(self, fn):
         self.operand_index = fn(self.operand_index)
@@ -301,16 +313,18 @@ class Log(torch.nn.Module):
         self.log_parameter_indices = torch.tensor(log_parameter_indices)
 
     def transform(self, X):
-        X = X.clone()
-        X[..., self.log_parameter_indices] = X.index_select(
-            -1, self.log_parameter_indices).log()
-        return X
+        with torch.profiler.record_function("Log.transform"):
+            X = X.clone()
+            X[..., self.log_parameter_indices] = X.index_select(
+                -1, self.log_parameter_indices).log()
+            return X
 
     def untransform(self, X):
-        X = X.clone()
-        X[..., self.log_parameter_indices] = X.index_select(
-            -1, self.log_parameter_indices).exp()
-        return X
+        with torch.profiler.record_function("Log.untransform"):
+            X = X.clone()
+            X[..., self.log_parameter_indices] = X.index_select(
+                -1, self.log_parameter_indices).exp()
+            return X
 
     def _apply(self, fn):
         self.log_parameter_indices = fn(self.log_parameter_indices)
@@ -344,9 +358,10 @@ class AppendMean(torch.nn.Module):
         self.space2 = [*space, ol.Scalar(mean_name, lower, upper)]
 
     def transform(self, X):
-        new_feature = X.index_select(-1, self.operand_indices).mean(dim=-1)
-        X = torch.cat((X, new_feature.unsqueeze(-1)), dim=-1)
-        return X
+        with torch.profiler.record_function("AppendMean.transform"):
+            new_feature = X.index_select(-1, self.operand_indices).mean(dim=-1)
+            X = torch.cat((X, new_feature.unsqueeze(-1)), dim=-1)
+            return X
 
     def _apply(self, fn):
         self.operand_indices = fn(self.operand_indices)
@@ -412,23 +427,26 @@ class ChoiceNHotProjection(torch.nn.Module):
         return super()._apply(fn)
 
     def transform(self, X):
-        choice_X = X.index_select(-1, self.choice_indices)
-        other_X = X.index_select(-1, self.other_indices)
+        with torch.profiler.record_function("ChoiceNHotProjection.transform"):
+            choice_X = X.index_select(-1, self.choice_indices)
+            other_X = X.index_select(-1, self.other_indices)
 
-        # Convert choice ints to n-hot vector
-        on_indices = choice_X.long() + self.choice_offsets
-        # Temporarily use an extra bit at the end to capture inactive parameters.
-        on_indices = torch.where(choice_X == -1, self.choice_tot, on_indices)
+            # Convert choice ints to n-hot vector
+            on_indices = choice_X.long() + self.choice_offsets
+            # Temporarily use an extra bit at the end to capture inactive
+            # parameters.
+            on_indices = torch.where(choice_X == -1, self.choice_tot,
+                                     on_indices)
 
-        choice_X_hot = torch.zeros(
-            (*choice_X.shape[:-1], self.choice_tot + 1),
-            dtype=bool, device=choice_X.device
-        ).scatter_(-1, on_indices, True)
+            choice_X_hot = torch.zeros(
+                (*choice_X.shape[:-1], self.choice_tot + 1),
+                dtype=bool, device=choice_X.device
+            ).scatter_(-1, on_indices, True)
 
-        # Strip the final "inactive" bit.
-        choice_X_hot = choice_X_hot[..., :self.choice_tot]
+            # Strip the final "inactive" bit.
+            choice_X_hot = choice_X_hot[..., :self.choice_tot]
 
-        return torch.cat((other_X, choice_X_hot), dim=-1)
+            return torch.cat((other_X, choice_X_hot), dim=-1)
 
 
 class ChoiceParameterLearnedProjection(torch.nn.Module):
@@ -528,29 +546,34 @@ class ChoiceParameterLearnedProjection(torch.nn.Module):
         self.proj = torch.nn.Parameter(proj)
 
     def transform(self, X):
-        choice_X = X.index_select(-1, self.embedded_indices)
+        with torch.profiler.record_function(
+                "ChoiceParameterLearnedProjection.transform"
+        ):
+            choice_X = X.index_select(-1, self.embedded_indices)
 
-        # Convert choice ints to n-hot vector
-        on_indices = choice_X.long() + self.choice_offsets
-        # Temporarily use an extra bit at the end to capture inactive parameters.
-        on_indices = torch.where(choice_X == -1, self.D_choice, on_indices)
-        # on_indices[torch.where(choice_X == -1)] = self.D_choice
-        choice_X_hot = torch.zeros((*choice_X.shape[:-1], self.D_choice + 1),
-                                   device=choice_X.device)
-        choice_X_hot.scatter_(-1, on_indices, 1.0)
-        # Strip the final "inactive" bit.
-        choice_X_hot = choice_X_hot[..., :self.D_choice]
+            # Convert choice ints to n-hot vector
+            on_indices = choice_X.long() + self.choice_offsets
+            # Temporarily use an extra bit at the end to capture inactive
+            # parameters.
+            on_indices = torch.where(choice_X == -1, self.D_choice, on_indices)
+            # on_indices[torch.where(choice_X == -1)] = self.D_choice
+            choice_X_hot = torch.zeros((*choice_X.shape[:-1],
+                                        self.D_choice + 1),
+                                       device=choice_X.device)
+            choice_X_hot.scatter_(-1, on_indices, 1.0)
+            # Strip the final "inactive" bit.
+            choice_X_hot = choice_X_hot[..., :self.D_choice]
 
-        proj = self.proj
-        if not self.training:
-            proj = proj.detach()
+            proj = self.proj
+            if not self.training:
+                proj = proj.detach()
 
-        d = torch.matmul(choice_X_hot, proj.transpose(-2, -1))
+            d = torch.matmul(choice_X_hot, proj.transpose(-2, -1))
 
-        other_X = X.index_select(-1, self.other_indices)
-        other_X[..., self.offset_scalar_indices] += d[..., :self.D_scalar]
-        X = torch.cat((other_X, d[..., self.D_scalar:]), dim=-1)
-        return X
+            other_X = X.index_select(-1, self.other_indices)
+            other_X[..., self.offset_scalar_indices] += d[..., :self.D_scalar]
+            X = torch.cat((other_X, d[..., self.D_scalar:]), dim=-1)
+            return X
 
     def _apply(self, fn):
         self.embedded_indices = fn(self.embedded_indices)
