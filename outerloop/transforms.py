@@ -73,8 +73,9 @@ class IntToScalar(torch.nn.Module):
 
     def untransform(self, X):
         X = X.clone()
-        X[..., self.int_indices] = X[..., self.int_indices].floor_()
-        return X
+        return X.index_put_(
+            self.int_indices, X.index_select(-1, self.int_indices).floor_()
+        )
 
     def _apply(self, fn):
         self.int_indices = fn(self.int_indices)
@@ -127,7 +128,7 @@ class Add(torch.nn.Module):
                                         if p.name == operand_name)
         except StopIteration:
             raise KeyError(operand_name)
-        self.operand_index = operand_i
+        self.operand_index = torch.tensor(operand_i)
 
         space2 = list(space)
         parameter_indices = []
@@ -151,15 +152,16 @@ class Add(torch.nn.Module):
 
     def transform(self, X):
         X = X.clone()
-        X[..., self.parameter_indices] += X[..., self.operand_index].unsqueeze(-1)
+        X[..., self.parameter_indices] += X.index_select(-1, self.operand_index)
         return X
 
     def untransform(self, X):
         X = X.clone()
-        X[..., self.parameter_indices] -= X[..., self.operand_index].unsqueeze(-1)
+        X[..., self.parameter_indices] -= X.index_select(-1, self.operand_index)
         return X
 
     def _apply(self, fn):
+        self.operand_index = fn(self.operand_index)
         self.parameter_indices = fn(self.parameter_indices)
         return super()._apply(fn)
 
@@ -178,7 +180,7 @@ class Subtract(torch.nn.Module):
                                         if p.name == operand_name)
         except StopIteration:
             raise KeyError(operand_name)
-        self.operand_index = operand_i
+        self.operand_index = torch.tensor(operand_i)
 
         space2 = list(space)
         parameter_indices = []
@@ -202,15 +204,16 @@ class Subtract(torch.nn.Module):
 
     def transform(self, X):
         X = X.clone()
-        X[..., self.parameter_indices] -= X[..., self.operand_index].unsqueeze(-1)
+        X[..., self.parameter_indices] -= X.index_select(-1, self.operand_index)
         return X
 
     def untransform(self, X):
         X = X.clone()
-        X[..., self.parameter_indices] -= X[..., self.operand_index].unsqueeze(-1)
+        X[..., self.parameter_indices] += X.index_select(-1, self.operand_index)
         return X
 
     def _apply(self, fn):
+        self.operand_index = fn(self.operand_index)
         self.parameter_indices = fn(self.parameter_indices)
         return super()._apply(fn)
 
@@ -229,7 +232,7 @@ class Multiply(torch.nn.Module):
                                         if p.name == operand_name)
         except StopIteration:
             raise KeyError(operand_name)
-        self.operand_index = operand_i
+        self.operand_index = torch.tensor(operand_i)
 
         space2 = list(space)
         parameter_indices = []
@@ -253,18 +256,19 @@ class Multiply(torch.nn.Module):
 
     def transform(self, X):
         # An in-place update to X will interfere with backprop to the operands.
-        operands = X[..., self.operand_index].unsqueeze(-1)
+        operands = X.index_select(-1, self.operand_index)
         X = X.clone()
         X[..., self.parameter_indices] *= operands
         return X
 
     def untransform(self, X):
-        operands = X[..., self.operand_index].unsqueeze(-1)
+        operands = X.index_select(-1, self.operand_index)
         X = X.clone()
         X[..., self.parameter_indices] /= operands
         return X
 
     def _apply(self, fn):
+        self.operand_index = fn(self.operand_index)
         self.parameter_indices = fn(self.parameter_indices)
         return super()._apply(fn)
 
@@ -298,12 +302,14 @@ class Log(torch.nn.Module):
 
     def transform(self, X):
         X = X.clone()
-        X[..., self.log_parameter_indices] = X[..., self.log_parameter_indices].log()
+        X[..., self.log_parameter_indices] = X.index_select(
+            -1, self.log_parameter_indices).log()
         return X
 
     def untransform(self, X):
         X = X.clone()
-        X[..., self.log_parameter_indices] = X[..., self.log_parameter_indices].exp()
+        X[..., self.log_parameter_indices] = X.index_select(
+            -1, self.log_parameter_indices).exp()
         return X
 
     def _apply(self, fn):
@@ -338,7 +344,7 @@ class AppendMean(torch.nn.Module):
         self.space2 = [*space, ol.Scalar(mean_name, lower, upper)]
 
     def transform(self, X):
-        new_feature = X[..., self.operand_indices].mean(dim=-1)
+        new_feature = X.index_select(-1, self.operand_indices).mean(dim=-1)
         X = torch.cat((X, new_feature.unsqueeze(-1)), dim=-1)
         return X
 
@@ -406,8 +412,8 @@ class ChoiceNHotProjection(torch.nn.Module):
         return super()._apply(fn)
 
     def transform(self, X):
-        choice_X = X[..., self.choice_indices]
-        other_X = X[..., self.other_indices]
+        choice_X = X.index_select(-1, self.choice_indices)
+        other_X = X.index_select(-1, self.other_indices)
 
         # Convert choice ints to n-hot vector
         on_indices = choice_X.long() + self.choice_offsets
@@ -522,7 +528,7 @@ class ChoiceParameterLearnedProjection(torch.nn.Module):
         self.proj = torch.nn.Parameter(proj)
 
     def transform(self, X):
-        choice_X = X[..., self.embedded_indices]
+        choice_X = X.index_select(-1, self.embedded_indices)
 
         # Convert choice ints to n-hot vector
         on_indices = choice_X.long() + self.choice_offsets
@@ -541,7 +547,7 @@ class ChoiceParameterLearnedProjection(torch.nn.Module):
 
         d = torch.matmul(choice_X_hot, proj.transpose(-2, -1))
 
-        other_X = X[..., self.other_indices]
+        other_X = X.index_select(-1, self.other_indices)
         other_X[..., self.offset_scalar_indices] += d[..., :self.D_scalar]
         X = torch.cat((other_X, d[..., self.D_scalar:]), dim=-1)
         return X
