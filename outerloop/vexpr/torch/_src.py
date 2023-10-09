@@ -17,8 +17,9 @@ matern_p, matern = vexpr.core._p_and_constructor("matern")
 def matern_impl(d, nu=2.5):
     with torch.profiler.record_function("matern"):
         assert nu == 2.5
-        exp_component = torch.exp(-math.sqrt(5) * d)
-        constant_component = 1. + (math.sqrt(5) * d) + (5. / 3.) * d**2
+        neg_sqrt5_times_d = (-math.sqrt(5)) * d
+        exp_component = torch.exp(neg_sqrt5_times_d)
+        constant_component = 1. - neg_sqrt5_times_d + (5. / 3.) * d**2
         return constant_component * exp_component
 
 
