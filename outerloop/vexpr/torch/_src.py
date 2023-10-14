@@ -14,6 +14,9 @@ from vexpr.torch.register_pushthrough import (
 from vexpr.custom.torch.register_pushthrough import (
     push_shuffle_through_unary_elementwise,
 )
+from vexpr.custom.torch.register_lift import (
+    lift_shuffle_from_unary_elementwise,
+)
 
 
 matern_p, matern = vexpr.core._p_and_constructor("matern")
@@ -35,4 +38,7 @@ v.pushthrough_impls[(t_p.cat_p, matern_p)] = partial(
     push_cat_through_unary_elementwise, matern_p)
 v.pushthrough_impls[(tc_p.shuffle_p, matern_p)] = partial(
     push_shuffle_through_unary_elementwise, matern_p
+)
+v.lift_impls[(matern_p, tc_p.shuffle_p)] = partial(
+    lift_shuffle_from_unary_elementwise, matern_p
 )
