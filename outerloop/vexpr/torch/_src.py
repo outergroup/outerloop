@@ -4,11 +4,15 @@ from functools import partial
 import torch
 import vexpr.core
 import vexpr.torch.primitives as t_p
+import vexpr.custom.torch.primitives as tc_p
 import vexpr.vectorization as v
 from vexpr import Vexpr
 from vexpr.torch.register_pushthrough import (
     push_cat_through_unary_elementwise,
     push_stack_through_unary_elementwise,
+)
+from vexpr.custom.torch.register_pushthrough import (
+    push_shuffle_through_unary_elementwise,
 )
 
 
@@ -29,3 +33,6 @@ v.pushthrough_impls[(t_p.stack_p, matern_p)] = partial(
     push_stack_through_unary_elementwise, matern_p)
 v.pushthrough_impls[(t_p.cat_p, matern_p)] = partial(
     push_cat_through_unary_elementwise, matern_p)
+v.pushthrough_impls[(tc_p.shuffle_p, matern_p)] = partial(
+    push_shuffle_through_unary_elementwise, matern_p
+)
