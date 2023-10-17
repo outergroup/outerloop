@@ -1,24 +1,12 @@
 import math
-from functools import partial
 
 import torch
 import vexpr.core
-import vexpr.torch.primitives as t_p
-import vexpr.custom.torch.primitives as tc_p
 import vexpr.vectorization as v
-from vexpr import Vexpr
-from vexpr.torch.register_pushthrough import (
-    push_cat_through_unary_elementwise,
-    push_stack_through_unary_elementwise,
-)
-from vexpr.custom.torch.register_pushthrough import (
-    identity_pushthrough,
-    push_shuffle_through_unary_elementwise,
-)
-from vexpr.custom.torch.register_lift import (
-    lift_shuffle_from_unary_elementwise,
-)
 
+# TODO gross hack, this is needed to make register_unary_elementwise_op do all
+# the right things
+import vexpr.torch
 
 matern_p, matern = vexpr.core._p_and_constructor("matern")
 
@@ -32,15 +20,5 @@ def matern_impl(d, nu=2.5):
 
 
 vexpr.core.eval_impls[matern_p] = matern_impl
-v.vectorize_impls[matern_p] = v.unary_elementwise_vectorize
-v.pushthrough_impls[(t_p.stack_p, matern_p)] = partial(
-    push_stack_through_unary_elementwise, matern_p)
-v.pushthrough_impls[(t_p.cat_p, matern_p)] = partial(
-    push_cat_through_unary_elementwise, matern_p)
-v.pushthrough_impls[(tc_p.shuffle_p, matern_p)] = partial(
-    push_shuffle_through_unary_elementwise, matern_p
-)
-v.pushthrough_impls[(tc_p.mul_along_dim_p, matern_p)] = identity_pushthrough
-v.lift_impls[(matern_p, tc_p.shuffle_p)] = partial(
-    lift_shuffle_from_unary_elementwise, matern_p
-)
+
+v.register_unary_elementwise_op(matern_p)
