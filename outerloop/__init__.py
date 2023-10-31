@@ -2,6 +2,7 @@ import itertools
 
 import torch
 
+from . import constraints
 from . import kernels
 from . import modules
 from . import priors
